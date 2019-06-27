@@ -29,6 +29,6 @@ client/node_modules
 
 ### venv
 env/
-/env/
-/env
 
+### sonarqube
+.scannerwork
