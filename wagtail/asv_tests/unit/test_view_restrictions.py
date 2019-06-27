@@ -41,11 +41,11 @@ class TestRequiredFields(TestViewRestrictions):
     
     def test_password_field_valid(self):
         '''Tests the happy flow of password form validation '''
-        # Setup
+        # Arrange
         self.form.cleaned_data = self.valid_data_password
         expected = 'unh4ackable'
 
-        # Run
+        # Act
         result = self.form.clean_password()
 
         # Assert
@@ -53,11 +53,11 @@ class TestRequiredFields(TestViewRestrictions):
 
     def test_password_field_invalid(self):
         '''Tests exception thrown for invalid input. '''
-        # Setup
+        # Arrange
         self.form.cleaned_data = self.valid_data_password
         self.form.cleaned_data.pop('password')
 
-        # Run
+        # Act
         with self.assertRaises(ValidationError) as context:
             self.form.clean_password()
 
@@ -66,11 +66,11 @@ class TestRequiredFields(TestViewRestrictions):
 
     def test_group_field_valid(self):
         '''Tests the happy flow of group form validation '''
-        # Setup
+        # Arrange
         self.form.cleaned_data = self.valid_data_groups
         expected = 'group1'
 
-        # Run
+        # Act
         result = self.form.clean_groups()
 
         # Assert
@@ -78,11 +78,11 @@ class TestRequiredFields(TestViewRestrictions):
 
     def test_group_field_invalid(self):
         '''Tests exception thrown for invalid input. '''
-        # Setup
+        # Arrange
         self.form.cleaned_data = self.valid_data_groups
         self.form.cleaned_data.pop('groups')
 
-        # Run and assert
+        # Act and assert
         with self.assertRaises(ValidationError) as context:
             self.form.clean_groups()
     
