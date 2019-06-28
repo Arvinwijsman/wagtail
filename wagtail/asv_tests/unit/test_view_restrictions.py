@@ -1,8 +1,8 @@
 from uuid import uuid4
 
-import unittest
+from datetime import datetime, timezone
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import patch, MagicMock
 
 from django import forms
 from django.contrib.auth.models import Group
@@ -10,26 +10,23 @@ from django.utils.translation import ugettext as _
 from django.utils.translation import ugettext_lazy
 from django.core.exceptions import ValidationError
 
-from wagtail.core.models import BaseViewRestriction
+from wagtail.core.models import BaseViewRestriction, Page, PageViewRestriction
 
 from wagtail.asv_tests.unit.base_test import BaseTest
 from wagtail.admin.forms.view_restrictions import BaseViewRestrictionForm
+from wagtail.admin.forms.pages import WagtailAdminPageForm
 
 
 class TestViewRestrictions(BaseTest):
     def setUp(self):
         super().setUp()
+
+        # Arrange
         with mock.patch.object(BaseViewRestrictionForm, '__init__', return_value=None):
             self.form = BaseViewRestrictionForm()  # pylint: disable=no-value-for-parameter
         self.form.fields = MagicMock()
         self.form.fields['groups'].widget = MagicMock()
         self.form.fields['groups'].queryset = MagicMock()
-    
-class TestRequiredFields(TestViewRestrictions):
-    def setUp(self):
-        super().setUp()
-
-        # Mock inputs
         self.valid_data_password = {
             'password': 'unh4ackable',
             'restriction_type': BaseViewRestriction.PASSWORD,
@@ -85,4 +82,3 @@ class TestRequiredFields(TestViewRestrictions):
         # Act and assert
         with self.assertRaises(ValidationError) as context:
             self.form.clean_groups()
-    
