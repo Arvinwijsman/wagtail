@@ -34,7 +34,7 @@ from wagtail.core import hooks
 from wagtail.core.models import Page, PageRevision, UserPagePermissionsProxy
 from wagtail.search.query import MATCH_ALL
 
-class TestCreatePage(BaseTest):
+class TestPageSubmissions(BaseTest):
     def setUp(self):
         super().setUp()
 
@@ -65,17 +65,22 @@ class TestCreatePage(BaseTest):
         self.parent_page.add_child = MagicMock()
         self.revision = MagicMock(return_value=False)
         self.revision.publish = MagicMock()
-    
-    @mock.patch('django.shortcuts._get_queryset')
-    @mock.patch('django.contrib.contenttypes.models.ContentType.objects.get_by_natural_key')
-    @mock.patch('wagtail.admin.views.pages._notify_user')
-    def test_submit_page(self, mock_query, mock_get_key, mock_notify):
-        # Arrange
+
         with mock.patch.object(Page, '__init__', return_value=None):
             self.page = Page()  # pylint: disable=no-value-for-parameter    
             self.page.save_revision = MagicMock(return_value=self.revision)
 
         self.mock_form.save = MagicMock(return_value=self.page)
+    
+    @mock.patch('django.shortcuts._get_queryset')
+    @mock.patch('django.contrib.contenttypes.models.ContentType.objects.get_by_natural_key')
+    @mock.patch('wagtail.admin.views.pages._notify_user')
+    def test_create_page_and_submit(self, mock_query, mock_get_key, mock_notify):
+        ''' 
+        This test runs the scenario of submitting a new page creation with valid
+        configurations. The user will be notified of success and redirected back.
+        '''
+        # Arrange
         redirection_url = 'wagtailadmin/pages/created.html'
 
         # Act
@@ -94,3 +99,33 @@ class TestCreatePage(BaseTest):
         assert self.parent_page.add_child.called
         assert self.revision.publish.called
         assert response.status_code == 302 and response.url == redirection_url
+
+    @mock.patch('django.shortcuts._get_queryset')
+    @mock.patch('django.contrib.contenttypes.models.ContentType.objects.get_by_natural_key')
+    @mock.patch('wagtail.admin.views.pages._notify_user')
+    def test_edit_page_stay_in_editor(self, mock_query, mock_get_key, mock_notify):
+        ''' 
+        This test runs the scenario of submitting a page revision with valid
+        configurations. The user clicked save revision but stays on the editor page.
+        '''        
+        # Arrange
+        self.request.POST['action-publish'] = False
+        self.request.POST['action-submit'] = False
+        self.page.id = 1234
+        redirection_url = 'back'
+
+        # Act
+        response = _create_page(
+            request=self.request, 
+            form_class=self.form_class, 
+            parent_page_perms=self.parent_page_perms,
+            parent_page=self.parent_page,
+            next_url=redirection_url,
+            content_type='type',
+            page_class='class',
+            page=self.page
+        )
+        
+        # Assert
+        expected_redirect = f'/admin/pages/1234/edit/?next={redirection_url}'
+        assert response.status_code == 302 and response.url == expected_redirect
