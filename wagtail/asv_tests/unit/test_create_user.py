@@ -8,6 +8,7 @@ class TestUserCreation(BaseTest):
     def setUp(self):
         super().setUp()
         self.request = MagicMock()
+        self.request.method = 'POST'
         self.mock_form = MagicMock()
 
     
