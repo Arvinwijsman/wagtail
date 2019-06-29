@@ -49,5 +49,5 @@ class TestPageScheduling(BaseTest):
         with self.assertRaises(Exception) as context:
             is_valid = self.form._validate_schedule_input(go_live_at, expire_at)
 
-            # assert
+            # Assert
             assert not is_valid
