@@ -310,11 +310,8 @@ class BaseCompositeEditHandler(EditHandler):
         children = []
         for child in self.children:
             if isinstance(child, FieldPanel):
-                if self.form._meta.exclude:
+                if self.form._meta.exclude or self.form._meta.fields:
                     if child.field_name in self.form._meta.exclude:
-                        continue
-                if self.form._meta.fields:
-                    if child.field_name not in self.form._meta.fields:
                         continue
             children.append(child.bind_to(form=self.form))
         self.children = children
