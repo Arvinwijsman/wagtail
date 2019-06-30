@@ -171,14 +171,12 @@ def edit(request, document_id):
         # Document is hosted externally (eg, S3)
         local_path = None
 
-    if local_path:
-        # Give error if document file doesn't exist
-        if not os.path.isfile(local_path):
-            messages.error(
-                request,
-                _("The file could not be found. Please change the source or delete the document"),
-                buttons=[messages.button(reverse('wagtaildocs:delete', args=(doc.id,)), _('Delete'))]
-            )
+    if local_path and not os.path.isfile(local_path):
+        messages.error(
+            request,
+            _("The file could not be found. Please change the source or delete the document"),
+            buttons=[messages.button(reverse('wagtaildocs:delete', args=(doc.id,)), _('Delete'))]
+        )
 
     return render(request, "wagtaildocs/documents/edit.html", {
         'document': doc,
