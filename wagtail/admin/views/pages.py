@@ -353,9 +353,47 @@ def edit(request, page_id):
 
     errors_debug = None
 
+    form, has_unsaved_changes = _edit_page(
+        request, form_class, page, page_id, parent, page_perms, next_url
+    )
+
+    edit_handler = edit_handler.bind_to(form=form)
+
+    # Check for revisions still undergoing moderation and warn
+    if latest_revision and latest_revision.submitted_for_moderation:
+        buttons = []
+
+        if page.live:
+            buttons.append(messages.button(
+                reverse('wagtailadmin_pages:revisions_compare', args=(page.id, 'live', latest_revision.id)),
+                _('Compare with live version')
+            ))
+
+        messages.warning(request, _("This page is currently awaiting moderation"), buttons=buttons)
+
+    if page.live and page.has_unpublished_changes:
+        # Page status needs to present the version of the page containing the correct live URL
+        page_for_status = real_page_record.specific
+    else:
+        page_for_status = page
+
+    return render(request, 'wagtailadmin/pages/edit.html', {
+        'page': page,
+        'page_for_status': page_for_status,
+        'content_type': content_type,
+        'edit_handler': edit_handler,
+        'errors_debug': errors_debug,
+        'action_menu': PageActionMenu(request, view='edit', page=page),
+        'preview_modes': page.preview_modes,
+        'form': form,
+        'next': next_url,
+        'has_unsaved_changes': has_unsaved_changes,
+    })
+
+def _edit_page(request, form_class, page, page_id, parent, page_perms, next_url):
     if request.method == 'POST':
         form = form_class(request.POST, request.FILES, instance=page,
-                          parent_page=parent)
+                            parent_page=parent)
 
         if form.is_valid() and not page.locked:
             page = form.save(commit=False)
@@ -378,108 +416,9 @@ def edit(request, page_id):
             go_live_at = page.go_live_at
 
             # Publish
-            if is_publishing:
-                revision.publish()
-                # Need to reload the page because the URL may have changed, and we
-                # need the up-to-date URL for the "View Live" button.
-                page = page.specific_class.objects.get(pk=page.pk)
-
-            # Notifications
-            if is_publishing:
-                if go_live_at and go_live_at > timezone.now():
-                    # Page has been scheduled for publishing in the future
-
-                    if is_reverting:
-                        message = _(
-                            "Revision from {0} of page '{1}' has been scheduled for publishing."
-                        ).format(
-                            previous_revision.created_at.strftime("%d %b %Y %H:%M"),
-                            page.get_admin_display_title()
-                        )
-                    else:
-                        if page.live:
-                            message = _(
-                                "Page '{0}' is live and this revision has been scheduled for publishing."
-                            ).format(
-                                page.get_admin_display_title()
-                            )
-                        else:
-                            message = _(
-                                "Page '{0}' has been scheduled for publishing."
-                            ).format(
-                                page.get_admin_display_title()
-                            )
-
-                    messages.success(request, message, buttons=[
-                        messages.button(
-                            reverse('wagtailadmin_pages:edit', args=(page.id,)),
-                            _('Edit')
-                        )
-                    ])
-
-                else:
-                    # Page is being published now
-
-                    if is_reverting:
-                        message = _(
-                            "Revision from {0} of page '{1}' has been published."
-                        ).format(
-                            previous_revision.created_at.strftime("%d %b %Y %H:%M"),
-                            page.get_admin_display_title()
-                        )
-                    else:
-                        message = _(
-                            "Page '{0}' has been published."
-                        ).format(
-                            page.get_admin_display_title()
-                        )
-
-                    buttons = []
-                    if page.url is not None:
-                        buttons.append(messages.button(page.url, _('View live'), new_window=True))
-                    buttons.append(messages.button(reverse('wagtailadmin_pages:edit', args=(page_id,)), _('Edit')))
-                    messages.success(request, message, buttons=buttons)
-
-            elif is_submitting:
-
-                message = _(
-                    "Page '{0}' has been submitted for moderation."
-                ).format(
-                    page.get_admin_display_title()
-                )
-
-                messages.success(request, message, buttons=[
-                    messages.button(
-                        reverse('wagtailadmin_pages:view_draft', args=(page_id,)),
-                        _('View draft'),
-                        new_window=True
-                    ),
-                    messages.button(
-                        reverse('wagtailadmin_pages:edit', args=(page_id,)),
-                        _('Edit')
-                    )
-                ])
-
-                if not send_notification(page.get_latest_revision().id, 'submitted', request.user.pk):
-                    messages.error(request, _("Failed to send notifications to moderators"))
-
-            else:  # Saving
-
-                if is_reverting:
-                    message = _(
-                        "Page '{0}' has been replaced with revision from {1}."
-                    ).format(
-                        page.get_admin_display_title(),
-                        previous_revision.created_at.strftime("%d %b %Y %H:%M")
-                    )
-                else:
-                    message = _(
-                        "Page '{0}' has been updated."
-                    ).format(
-                        page.get_admin_display_title()
-                    )
-
-                messages.success(request, message)
+            _publish_page(
+                request, is_publishing, is_submitting, is_reverting, go_live_at, page_id, revision, previous_revision
+            )
 
             for fn in hooks.get_hooks('after_edit_page'):
                 result = fn(request, page)
@@ -520,39 +459,121 @@ def edit(request, page_id):
         form = form_class(instance=page, parent_page=parent)
         has_unsaved_changes = False
 
-    edit_handler = edit_handler.bind_to(form=form)
+    return form, has_unsaved_changes    
 
-    # Check for revisions still undergoing moderation and warn
-    if latest_revision and latest_revision.submitted_for_moderation:
-        buttons = []
+def _publish_page(
+    request, is_publishing, is_submitting, is_reverting, go_live_at, page_id, revision, previous_revision):
 
-        if page.live:
-            buttons.append(messages.button(
-                reverse('wagtailadmin_pages:revisions_compare', args=(page.id, 'live', latest_revision.id)),
-                _('Compare with live version')
-            ))
+    if is_publishing:
+        revision.publish()
+        # Need to reload the page because the URL may have changed, and we
+        # need the up-to-date URL for the "View Live" button.
+        page = page.specific_class.objects.get(pk=page.pk)
 
-        messages.warning(request, _("This page is currently awaiting moderation"), buttons=buttons)
+        # Notifications
+        _edit_publish_notifications(
+            request, is_publishing, go_live_at, is_reverting, page, page_id, previous_revision
+        )
 
-    if page.live and page.has_unpublished_changes:
-        # Page status needs to present the version of the page containing the correct live URL
-        page_for_status = real_page_record.specific
+    elif is_submitting:
+        _submit_notifications(request, page, page_id)
+
+    else:  # Saving
+        _save_notifications(request, is_reverting, page, previous_revision)
+
+def _edit_publish_notifications(request, is_publishing, go_live_at, is_reverting, page, page_id, previous_revision):
+    if go_live_at and go_live_at > timezone.now():
+        # Page has been scheduled for publishing in the future
+
+        if is_reverting:
+            message = _(
+                "Revision from {0} of page '{1}' has been scheduled for publishing."
+            ).format(
+                previous_revision.created_at.strftime("%d %b %Y %H:%M"),
+                page.get_admin_display_title()
+            )
+        else:
+            if page.live:
+                message = _(
+                    "Page '{0}' is live and this revision has been scheduled for publishing."
+                ).format(
+                    page.get_admin_display_title()
+                )
+            else:
+                message = _(
+                    "Page '{0}' has been scheduled for publishing."
+                ).format(
+                    page.get_admin_display_title()
+                )
+
+        messages.success(request, message, buttons=[
+            messages.button(
+                reverse('wagtailadmin_pages:edit', args=(page.id,)),
+                _('Edit')
+            )
+        ])
+
     else:
-        page_for_status = page
+        # Page is being published now
 
-    return render(request, 'wagtailadmin/pages/edit.html', {
-        'page': page,
-        'page_for_status': page_for_status,
-        'content_type': content_type,
-        'edit_handler': edit_handler,
-        'errors_debug': errors_debug,
-        'action_menu': PageActionMenu(request, view='edit', page=page),
-        'preview_modes': page.preview_modes,
-        'form': form,
-        'next': next_url,
-        'has_unsaved_changes': has_unsaved_changes,
-    })
+        if is_reverting:
+            message = _(
+                "Revision from {0} of page '{1}' has been published."
+            ).format(
+                previous_revision.created_at.strftime("%d %b %Y %H:%M"),
+                page.get_admin_display_title()
+            )
+        else:
+            message = _(
+                "Page '{0}' has been published."
+            ).format(
+                page.get_admin_display_title()
+            )
 
+        buttons = []
+        if page.url is not None:
+            buttons.append(messages.button(page.url, _('View live'), new_window=True))
+        buttons.append(messages.button(reverse('wagtailadmin_pages:edit', args=(page_id,)), _('Edit')))
+        messages.success(request, message, buttons=buttons)    
+
+def _submit_notifications(request, page, page_id):
+    message = _(
+        "Page '{0}' has been submitted for moderation."
+    ).format(
+        page.get_admin_display_title()
+    )
+
+    messages.success(request, message, buttons=[
+        messages.button(
+            reverse('wagtailadmin_pages:view_draft', args=(page_id,)),
+            _('View draft'),
+            new_window=True
+        ),
+        messages.button(
+            reverse('wagtailadmin_pages:edit', args=(page_id,)),
+            _('Edit')
+        )
+    ])
+
+    if not send_notification(page.get_latest_revision().id, 'submitted', request.user.pk):
+        messages.error(request, _("Failed to send notifications to moderators"))
+
+def _save_notifications(request, is_reverting, page, previous_revision):
+    if is_reverting:
+        message = _(
+            "Page '{0}' has been replaced with revision from {1}."
+        ).format(
+            page.get_admin_display_title(),
+            previous_revision.created_at.strftime("%d %b %Y %H:%M")
+        )
+    else:
+        message = _(
+            "Page '{0}' has been updated."
+        ).format(
+            page.get_admin_display_title()
+        )
+
+    messages.success(request, message)
 
 def delete(request, page_id):
     page = get_object_or_404(Page, id=page_id).specific
