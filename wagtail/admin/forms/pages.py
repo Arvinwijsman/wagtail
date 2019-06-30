@@ -117,19 +117,26 @@ class WagtailAdminPageForm(WagtailAdminModelForm):
         go_live_at = cleaned_data.get('go_live_at')
         expire_at = cleaned_data.get('expire_at')
 
-        # Go live must be before expire
-        if go_live_at and expire_at:
-            if go_live_at > expire_at:
-                msg = _('Go live date/time must be before expiry date/time')
-                self.add_error('go_live_at', forms.ValidationError(msg))
-                self.add_error('expire_at', forms.ValidationError(msg))
-
-        # Expire at must be in the future
-        if expire_at and expire_at < timezone.now():
-            self.add_error('expire_at', forms.ValidationError(_('Expiry date/time must be in the future')))
+        valid = self._validate_schedule_input(go_live_at, expire_at)
 
         # Don't allow an existing first_published_at to be unset by clearing the field
         if 'first_published_at' in cleaned_data and not cleaned_data['first_published_at']:
             del cleaned_data['first_published_at']
 
         return cleaned_data
+    
+    def _validate_schedule_input(self, go_live_at, expire_at):
+        # Go live must be before expire
+        if go_live_at and expire_at:
+            if go_live_at > expire_at:
+                msg = _('Go live date/time must be before expiry date/time')
+                self.add_error('go_live_at', forms.ValidationError(msg))
+                self.add_error('expire_at', forms.ValidationError(msg))
+                return False
+
+        # Expire at must be in the future
+        if expire_at and expire_at < timezone.now():
+            self.add_error('expire_at', forms.ValidationError(_('Expiry date/time must be in the future')))       
+            return False
+
+        return True

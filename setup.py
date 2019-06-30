@@ -21,7 +21,7 @@ except ImportError:
 
 
 install_requires = [
-    "Django>=2.0,<2.3",
+    "Django==2.1.9",
     "django-modelcluster>=4.2,<5.0",
     "django-taggit>=0.23,<1.0",
     "django-treebeard>=4.2.0,<5.0",
@@ -40,6 +40,7 @@ install_requires = [
 # Testing dependencies
 testing_extras = [
     # Required for running the tests
+    'pytest',
     'python-dateutil>=2.2',
     'pytz>=2014.7',
     'elasticsearch>=1.0.0,<3.0',
@@ -60,7 +61,6 @@ testing_extras = [
 
 # Documentation dependencies
 documentation_extras = [
-    'pyenchant==1.6.8',
     'sphinxcontrib-spelling>=2.3.0',
     'Sphinx>=1.5.2',
     'sphinx-autobuild>=0.6.0',

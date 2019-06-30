@@ -26,3 +26,9 @@ client/node_modules
 
 ### vscode
 .vscode
+
+### venv
+env/
+
+### sonarqube
+.scannerwork

@@ -216,6 +216,12 @@ def create(request, content_type_app_name, content_type_model_name, parent_page_
 
     next_url = get_valid_next_url_from_request(request)
 
+    _create_page(request, form_class, parent_page, 
+        parent_page_perms, page, next_url, content_type, page_class)
+
+def _create_page(request, form_class, parent_page, 
+    parent_page_perms, page, next_url, content_type, page_class):
+    
     if request.method == 'POST':
         form = form_class(request.POST, request.FILES, instance=page,
                           parent_page=parent_page)
@@ -243,37 +249,7 @@ def create(request, content_type_app_name, content_type_model_name, parent_page_
                 revision.publish()
 
             # Notifications
-            if is_publishing:
-                if page.go_live_at and page.go_live_at > timezone.now():
-                    messages.success(request, _("Page '{0}' created and scheduled for publishing.").format(page.get_admin_display_title()), buttons=[
-                        messages.button(reverse('wagtailadmin_pages:edit', args=(page.id,)), _('Edit'))
-                    ])
-                else:
-                    buttons = []
-                    if page.url is not None:
-                        buttons.append(messages.button(page.url, _('View live'), new_window=True))
-                    buttons.append(messages.button(reverse('wagtailadmin_pages:edit', args=(page.id,)), _('Edit')))
-                    messages.success(request, _("Page '{0}' created and published.").format(page.get_admin_display_title()), buttons=buttons)
-            elif is_submitting:
-                messages.success(
-                    request,
-                    _("Page '{0}' created and submitted for moderation.").format(page.get_admin_display_title()),
-                    buttons=[
-                        messages.button(
-                            reverse('wagtailadmin_pages:view_draft', args=(page.id,)),
-                            _('View draft'),
-                            new_window=True
-                        ),
-                        messages.button(
-                            reverse('wagtailadmin_pages:edit', args=(page.id,)),
-                            _('Edit')
-                        )
-                    ]
-                )
-                if not send_notification(page.get_latest_revision().id, 'submitted', request.user.pk):
-                    messages.error(request, _("Failed to send notifications to moderators"))
-            else:
-                messages.success(request, _("Page '{0}' created.").format(page.get_admin_display_title()))
+            _notify_user(request, page, is_publishing, is_submitting)
 
             for fn in hooks.get_hooks('after_create_page'):
                 result = fn(request, page)
@@ -303,20 +279,52 @@ def create(request, content_type_app_name, content_type_model_name, parent_page_
         signals.init_new_page.send(sender=create, page=page, parent=parent_page)
         form = form_class(instance=page, parent_page=parent_page)
         has_unsaved_changes = False
+        edit_handler = edit_handler.bind_to(form=form)
 
-    edit_handler = edit_handler.bind_to(form=form)
+        return render(request, 'wagtailadmin/pages/create.html', {
+            'content_type': content_type,
+            'page_class': page_class,
+            'parent_page': parent_page,
+            'edit_handler': edit_handler,
+            'action_menu': PageActionMenu(request, view='create', parent_page=parent_page),
+            'preview_modes': page.preview_modes,
+            'form': form,
+            'next': next_url,
+            'has_unsaved_changes': has_unsaved_changes,
+        })
 
-    return render(request, 'wagtailadmin/pages/create.html', {
-        'content_type': content_type,
-        'page_class': page_class,
-        'parent_page': parent_page,
-        'edit_handler': edit_handler,
-        'action_menu': PageActionMenu(request, view='create', parent_page=parent_page),
-        'preview_modes': page.preview_modes,
-        'form': form,
-        'next': next_url,
-        'has_unsaved_changes': has_unsaved_changes,
-    })
+def _notify_user(request, page, is_publishing, is_submitting):
+    if is_publishing:
+        if page.go_live_at and page.go_live_at > timezone.now():
+            messages.success(request, _("Page '{0}' created and scheduled for publishing.").format(page.get_admin_display_title()), buttons=[
+                messages.button(reverse('wagtailadmin_pages:edit', args=(page.id,)), _('Edit'))
+            ])
+        else:
+            buttons = []
+            if page.url is not None:
+                buttons.append(messages.button(page.url, _('View live'), new_window=True))
+            buttons.append(messages.button(reverse('wagtailadmin_pages:edit', args=(page.id,)), _('Edit')))
+            messages.success(request, _("Page '{0}' created and published.").format(page.get_admin_display_title()), buttons=buttons)
+    elif is_submitting:
+        messages.success(
+            request,
+            _("Page '{0}' created and submitted for moderation.").format(page.get_admin_display_title()),
+            buttons=[
+                messages.button(
+                    reverse('wagtailadmin_pages:view_draft', args=(page.id,)),
+                    _('View draft'),
+                    new_window=True
+                ),
+                messages.button(
+                    reverse('wagtailadmin_pages:edit', args=(page.id,)),
+                    _('Edit')
+                )
+            ]
+        )
+        if not send_notification(page.get_latest_revision().id, 'submitted', request.user.pk):
+            messages.error(request, _("Failed to send notifications to moderators"))
+    else:
+        messages.success(request, _("Page '{0}' created.").format(page.get_admin_display_title()))    
 
 
 def edit(request, page_id):
