@@ -38,11 +38,11 @@ class SettingModuleProxy(dict):
         """
         Get a setting instance
         """
-        Model = registry.get_by_natural_key(self.app_label, model_name)
-        if Model is None:
+        model = registry.get_by_natural_key(self.app_label, model_name)
+        if model is None:
             return None
 
-        return Model.for_site(self.site)
+        return model.for_site(self.site)
 
     def __str__(self):
         return 'SettingsModuleProxy({0})'.format(self.app_label)

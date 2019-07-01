@@ -210,7 +210,7 @@ def collection_member_permission_formset_factory(
             widget=forms.CheckboxSelectMultiple
         )
 
-    GroupCollectionMemberPermissionFormSet = type(
+    group_collection_member_permission_formset = type(
         str('GroupCollectionMemberPermissionFormSet'),
         (BaseGroupCollectionMemberPermissionFormSet, ),
         {
@@ -223,7 +223,7 @@ def collection_member_permission_formset_factory(
 
     return forms.formset_factory(
         CollectionMemberPermissionsForm,
-        formset=GroupCollectionMemberPermissionFormSet,
+        formset=group_collection_member_permission_formset,
         extra=0,
         can_delete=True
     )
